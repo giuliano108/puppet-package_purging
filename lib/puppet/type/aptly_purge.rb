@@ -38,9 +38,10 @@ EOS
 
     # Using the RAL, divide the world into Catalog packages and not-Catalog
     # packages.
+    cached_refs = catalog.resource_refs
     (managed_packages, unmanaged_packages) = package.instances.select do |p|
       p.provider.is_a?(Puppet::Type::Package::ProviderDpkg)
-    end.partition { |r| catalog.resource_refs.include? r.ref }
+    end.partition { |r| cached_refs.include? r.ref }
 
     managed_package_names = managed_packages.map(&:name)
     unmanaged_package_names = unmanaged_packages.map(&:name)
