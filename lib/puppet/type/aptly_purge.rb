@@ -47,7 +47,7 @@ EOD
     package.instances.select do |p|
       p.provider.is_a?(Puppet::Type::Package::ProviderDpkg)
     end.each do |r|
-      catalog_r = catalog.resource(r.ref) || find_resource_alias(["Package", r.name, :held_apt])
+      catalog_r = catalog.resource(r.ref) || find_resource_alias(["Package", r.name, :apt])
       if catalog_r.nil?
         unmanaged_packages << r
       else

@@ -1,6 +1,6 @@
 require 'spec_helper_acceptance'
 
-describe 'aptitude tests -' do
+describe 'provider => apt tests -' do
   def get_installed_version host, package_name
     line = on(host, "dpkg -s #{package_name} | grep ^Version").stdout
     version = line.gsub(/\s+/,'').split(':',2).last
@@ -48,12 +48,9 @@ describe 'aptitude tests -' do
       scp_to host, "#{localpath}/localrepo.list", '/etc/apt/sources.list.d'
       on host, "apt-get update -o Dir::Etc::sourcelist=sources.list.d/localrepo.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
 
-      install_package host, 'aptitude'
       install_package host, 'dummypkg'
       # same as `include package_purging::config`, saves a Puppet run
       create_remote_file host, '/etc/apt/apt.conf.d/99always-purge', "APT::Get::Purge \"true\";\n";
-      # aptitude thinks packages from the local repo are untrusted...
-      create_remote_file host, '/etc/apt/apt.conf.d/98allow-untrusted', "Aptitude::Cmdline::ignore-trust-violations \"true\";\n";
 
       @managed_packages.each do |p|
         @package_versions[p] = get_installed_version(host, p) || get_candidate_version(host, p)
@@ -90,7 +87,7 @@ describe 'aptitude tests -' do
     end
   end
 
-  context 'dummypkg installed via aptitude' do
+  context 'dummypkg installed by specifying provider => apt' do
     it 'produces a noop puppet run' do
       managed_packages = @managed_packages
       m = (managed_packages - ['dummypkg']).map do |p|
@@ -101,7 +98,7 @@ describe 'aptitude tests -' do
 
         package{'#{p}':
           ensure => '#{@package_versions[p]}',
-          provider => 'aptitude',
+          provider => 'apt',
         }
         aptly_purge {'packages':
           hold => true,
@@ -116,38 +113,6 @@ describe 'aptitude tests -' do
       expect(packages_state.values_at(*managed_packages)).to eq(['hold'] * managed_packages.length)
       # everything else isn't
       expect(packages_state.values_at(*(packages_state.keys - managed_packages))).not_to include('hold')
-    end
-
-    it 'actually uses /usr/bin/aptitude' do
-      on default_node, 'apt-get purge -y --force-yes dummypkg'  # get puppet to install the package again
-      managed_packages = @managed_packages
-      m = (managed_packages - ['dummypkg']).map do |p|
-        "package { '#{p}': ensure => '#{@package_versions[p]}' }"
-      end.join("\n")
-      p = 'dummypkg'
-      m += <<-EOS
-
-        package{'#{p}':
-          ensure => '#{@package_versions[p]}',
-          provider => 'aptitude',
-        }
-        aptly_purge {'packages':
-          hold => true,
-        }
-      EOS
-      apply_manifest m, :expect_changes => true, :debug => true
-      expect(@result.stdout).to include("/usr/bin/aptitude -y -o DPkg::Options::=--force-confold install dummypkg=0.0.3")
-      expect(@result.exit_code).to eq 2
-      expect(package('dummypkg')).to be_installed
-
-      packages_state = get_packages_state default_node
-      # our packages except dummypkg are held
-      # dummypkg is not held because it's just been installed: aptly_purge bails out when, package-wise,
-      # catalog and system are not in sync
-      held_packages = managed_packages - ['dummypkg']
-      expect(packages_state.values_at(*held_packages)).to eq(['hold'] * held_packages.length)
-      # everything else is not held
-      expect(packages_state.values_at(*(packages_state.keys - held_packages))).not_to include('hold')
     end
   end
 end
